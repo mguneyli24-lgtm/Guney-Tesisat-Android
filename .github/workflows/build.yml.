@@ -1,0 +1,332 @@
+name: Guney Tesisat APK
+
+on:
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Java kur
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Gradle kur
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.7'
+
+      - name: Android projesini olustur
+        run: |
+          mkdir -p app/src/main/java/com/guneytesisat/app
+
+          cat > settings.gradle <<'EOF'
+          pluginManagement {
+              repositories {
+                  google()
+                  mavenCentral()
+                  gradlePluginPortal()
+              }
+          }
+          dependencyResolutionManagement {
+              repositoriesMode.set(RepositoriesMode.FAIL_ON_PROJECT_REPOS)
+              repositories {
+                  google()
+                  mavenCentral()
+              }
+          }
+          rootProject.name = 'GuneyTesisat'
+          include ':app'
+          EOF
+
+          cat > build.gradle <<'EOF'
+          plugins {
+              id 'com.android.application' version '8.5.2' apply false
+          }
+          EOF
+
+          cat > app/build.gradle <<'EOF'
+          plugins {
+              id 'com.android.application'
+          }
+
+          android {
+              namespace 'com.guneytesisat.app'
+              compileSdk 35
+
+              defaultConfig {
+                  applicationId 'com.guneytesisat.app'
+                  minSdk 23
+                  targetSdk 35
+                  versionCode 1
+                  versionName '1.0'
+              }
+          }
+          EOF
+
+          cat > app/src/main/AndroidManifest.xml <<'EOF'
+          <manifest xmlns:android="http://schemas.android.com/apk/res/android">
+              <application
+                  android:theme="@style/AppTheme"
+                  android:label="Güney Tesisat">
+                  <activity
+                      android:name=".MainActivity"
+                      android:screenOrientation="unspecified"
+                      android:exported="true">
+                      <intent-filter>
+                          <action android:name="android.intent.action.MAIN"/>
+                          <category android:name="android.intent.category.LAUNCHER"/>
+                      </intent-filter>
+                  </activity>
+              </application>
+          </manifest>
+          EOF
+
+          mkdir -p app/src/main/res/values
+          cat > app/src/main/res/values/styles.xml <<'EOF'
+          <resources>
+              <style name="AppTheme" parent="android:style/Theme.Material.Light.NoActionBar">
+                  <item name="android:fontFamily">sans</item>
+                  <item name="android:colorAccent">#1565C0</item>
+              </style>
+          </resources>
+          EOF
+
+          cat > app/src/main/java/com/guneytesisat/app/MainActivity.java <<'EOF'
+          package com.guneytesisat.app;
+
+          import android.app.*;
+          import android.os.*;
+          import android.content.*;
+          import android.database.sqlite.*;
+          import android.graphics.Typeface;
+          import android.net.Uri;
+          import android.view.*;
+          import android.widget.*;
+          import java.util.*;
+
+          public class MainActivity extends Activity {
+
+              EditText ad, telefon, il, ilce, mahalle, sokak, islem, fiyat, tarih;
+              Spinner odeme;
+              TextView sonuc;
+              DB db;
+
+              public void onCreate(Bundle b) {
+                  super.onCreate(b);
+                  db = new DB(this);
+
+                  ScrollView sv = new ScrollView(this);
+                  LinearLayout l = new LinearLayout(this);
+                  l.setOrientation(LinearLayout.VERTICAL);
+                  l.setPadding(28,28,28,28);
+                  sv.addView(l);
+
+                  TextView baslik = new TextView(this);
+                  baslik.setText("GÜNEY TESİSAT\nMÜŞTERİ KAYIT PROGRAMI");
+                  baslik.setTextSize(25);
+                  baslik.setTypeface(null, Typeface.BOLD);
+                  baslik.setGravity(Gravity.CENTER);
+                  baslik.setPadding(0,20,0,30);
+                  l.addView(baslik);
+
+                  ad = alan(l,"MÜŞTERİ ADI SOYADI");
+                  telefon = alan(l,"TELEFON");
+                  il = alan(l,"İL");
+                  il.setText("Ordu");
+                  ilce = alan(l,"İLÇE");
+                  mahalle = alan(l,"MAHALLE");
+                  sokak = alan(l,"CADDE / SOKAK / NO");
+                  islem = alan(l,"YAPILAN İŞ");
+                  fiyat = alan(l,"FİYAT (KDV HARİÇ)");
+                  tarih = alan(l,"TAHSİLAT / TAKSİT TARİHİ");
+
+                  TextView ot = new TextView(this);
+                  ot.setText("ÖDEME ŞEKLİ");
+                  ot.setTypeface(null,Typeface.BOLD);
+                  l.addView(ot);
+
+                  odeme = new Spinner(this);
+                  String[] od = {"NAKİT","KART","IBAN / HAVALE","ELDEN TAKSİT","SENET"};
+                  odeme.setAdapter(new ArrayAdapter<String>(
+                      this,android.R.layout.simple_spinner_dropdown_item,od));
+                  l.addView(odeme);
+
+                  Button kaydet = buton("MÜŞTERİYİ KAYDET");
+                  l.addView(kaydet);
+
+                  Button harita = buton("ADRESİ GOOGLE HARİTALAR'DA AÇ");
+                  l.addView(harita);
+
+                  Button gelir = buton("GELİR RAPORU");
+                  l.addView(gelir);
+
+                  Button liste = buton("KAYITLI MÜŞTERİLER");
+                  l.addView(liste);
+
+                  sonuc = new TextView(this);
+                  sonuc.setTextSize(17);
+                  sonuc.setPadding(5,30,5,80);
+                  l.addView(sonuc);
+
+                  kaydet.setOnClickListener(v -> kaydet());
+                  harita.setOnClickListener(v -> harita());
+                  gelir.setOnClickListener(v -> rapor());
+                  liste.setOnClickListener(v -> liste());
+
+                  setContentView(sv);
+              }
+
+              EditText alan(LinearLayout l,String s) {
+                  TextView t=new TextView(this);
+                  t.setText(s);
+                  t.setTypeface(null,Typeface.BOLD);
+                  t.setPadding(0,15,0,2);
+                  l.addView(t);
+                  EditText e=new EditText(this);
+                  e.setSingleLine(true);
+                  l.addView(e);
+                  return e;
+              }
+
+              Button buton(String s) {
+                  Button b=new Button(this);
+                  b.setText(s);
+                  b.setTextSize(16);
+                  b.setPadding(5,15,5,15);
+                  return b;
+              }
+
+              void kaydet() {
+                  if(ad.getText().toString().trim().isEmpty()){
+                      Toast.makeText(this,"Müşteri adı girin",Toast.LENGTH_SHORT).show();
+                      return;
+                  }
+
+                  double tutar=0;
+                  try {
+                      tutar=Double.parseDouble(
+                          fiyat.getText().toString().replace(",","."));
+                  } catch(Exception e){}
+
+                  String o=odeme.getSelectedItem().toString();
+
+                  if(o.equals("IBAN / HAVALE"))
+                      tutar=tutar*1.20;
+
+                  SQLiteDatabase d=db.getWritableDatabase();
+
+                  android.content.ContentValues c=
+                      new android.content.ContentValues();
+
+                  c.put("ad",ad.getText().toString());
+                  c.put("telefon",telefon.getText().toString());
+                  c.put("adres",
+                      mahalle.getText()+" "+
+                      sokak.getText()+" "+
+                      ilce.getText()+" "+
+                      il.getText());
+
+                  c.put("islem",islem.getText().toString());
+                  c.put("odeme",o);
+                  c.put("tutar",tutar);
+                  c.put("tarih",tarih.getText().toString());
+
+                  d.insert("musteri",null,c);
+
+                  Toast.makeText(
+                      this,
+                      "Müşteri kaydedildi",
+                      Toast.LENGTH_LONG).show();
+
+                  sonuc.setText(
+                      "KAYIT TAMAMLANDI\n"+
+                      "Ödeme: "+o+
+                      "\nToplam: "+String.format("%.2f TL",tutar));
+              }
+
+              void harita() {
+                  String a =
+                      mahalle.getText()+" "+
+                      sokak.getText()+" "+
+                      ilce.getText()+" "+
+                      il.getText();
+
+                  Intent i=new Intent(
+                      Intent.ACTION_VIEW,
+                      Uri.parse("geo:0,0?q="+Uri.encode(a)));
+
+                  startActivity(i);
+              }
+
+              void rapor() {
+                  android.database.Cursor c=
+                      db.getReadableDatabase().rawQuery(
+                          "SELECT SUM(tutar) FROM musteri",null);
+
+                  double toplam=0;
+
+                  if(c.moveToFirst())
+                      toplam=c.getDouble(0);
+
+                  c.close();
+
+                  sonuc.setText(
+                      "TOPLAM GELİR\n"+
+                      String.format("%.2f TL",toplam));
+              }
+
+              void liste() {
+                  android.database.Cursor c=
+                      db.getReadableDatabase().rawQuery(
+                          "SELECT ad,islem,odeme,tutar,tarih FROM musteri ORDER BY id DESC",
+                          null);
+
+                  StringBuilder s=new StringBuilder("KAYITLI MÜŞTERİLER\n\n");
+
+                  while(c.moveToNext()){
+                      s.append(c.getString(0)).append("\n");
+                      s.append(c.getString(1)).append("\n");
+                      s.append(c.getString(2)).append(" - ");
+                      s.append(String.format("%.2f TL",c.getDouble(3))).append("\n");
+                      s.append("Tahsilat: ").append(c.getString(4)).append("\n\n");
+                  }
+
+                  c.close();
+                  sonuc.setText(s.toString());
+              }
+
+              static class DB extends SQLiteOpenHelper {
+                  DB(Context c){
+                      super(c,"guneytesisat.db",null,1);
+                  }
+
+                  public void onCreate(SQLiteDatabase d){
+                      d.execSQL(
+                          "CREATE TABLE musteri ("+
+                          "id INTEGER PRIMARY KEY AUTOINCREMENT,"+
+                          "ad TEXT,"+
+                          "telefon TEXT,"+
+                          "adres TEXT,"+
+                          "islem TEXT,"+
+                          "odeme TEXT,"+
+                          "tutar REAL,"+
+                          "tarih TEXT)");
+                  }
+
+                  public void onUpgrade(SQLiteDatabase d,int a,int b){}
+              }
+          }
+          EOF
+
+      - name: APK olustur
+        run: gradle :app:assembleDebug
+
+      - name: APK dosyasini kaydet
+        uses: actions/upload-artifact@v4
+        with:
+          name: Guney-Tesisat-APK
+          path: app/build/outputs/apk/debug/app-debug.apk
